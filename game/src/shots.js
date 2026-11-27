@@ -1,12 +1,59 @@
-// These frozen flight-log moments use the same world, airframe and HUD as play.
-export function stageShot(name,world){
- world.reset(name==='approach'?2:0);world.time=83;world.score=1250;world.fuel=72;
- // Gate scores and elapsed resources reflect each frozen route milestone.
- if(name==='cover'){Object.assign(world.flight,{x:95,y:229,z:-710,heading:.16,roll:.12,pitch:.03});world.progress=2;world.score=750;world.time=52;world.fuel=80;}
- // Measured ground here is 115.296322 m; keep the aircraft and chase camera clear on final.
- if(name==='approach')Object.assign(world.flight,{x:310,y:165.296322,z:-675,heading:0,speed:34,throttle:.35,pitch:-.035});
- if(name==='canyon'){Object.assign(world.flight,{x:-100,y:100,z:680,heading:-.12,roll:-.19,speed:56});world.score=250;world.time=24;world.fuel=84;}
- if(name==='complete'){Object.assign(world.flight,{x:90,y:240,z:-720,heading:.1,roll:0});world.progress=8;world.score=3420;world.status='complete';world.reason='ALL GATES CLEARED · Northern route certified';}
- world.rings.forEach((r,i)=>r.visible=world.contract===0&&i>=world.progress);
+import { CONFIG } from './config.js';
+import { setFlaps, evaluateTouchdown } from './flight.js';
+import { groundHeight } from './terrain.js';
+
+export function stageShot(name, world) {
+  const contract = name === 'supply' ? 1 : name === 'cockpit' || name === 'touchdown' ? 2 : 0;
+  world.reset(contract);
+  const f = world.flight;
+  // Set the approach values here so the cockpit branch remains untouched.
+  world.time = 52;
+  world.score = 750;
+  world.fuel = 64;
+  if (name === 'cover') {
+    world.time = 18;
+    world.score = 250;
+    world.fuel = 92;
+    Object.assign(f, { x: -120, y: 235, z: -710, heading: 0.16, roll: 0.48, pitch: 0.04, speed: 49, throttle: 0.68 });
+    f.coverCamera = true;
+    world.progress = 2;
+  }
+  if (name === 'cockpit') {
+    // The cleared southern approach now supports a three-degree glidepath:
+    // 280 m before the threshold, 33.0113 m above the local terrain.
+    Object.assign(f, { x: 310, y: 48.0113, z: -670, heading: 0, roll: 0, pitch: -0.05, speed: 32, throttle: 0.35 });
+    setFlaps(f, 30);
+  }
+  if (name === 'supply') {
+    world.time = 68;
+    world.score = 1250;
+    Object.assign(f, { x: 65, y: groundHeight(65, -975) + 45, z: -975, heading: 0, roll: 0, pitch: -0.02, speed: 35, throttle: 0.55 });
+    world.fuel = 22;
+    world.damage = 18;
+    world.release();
+    for (let i = 0; i < 30; i++) {
+      world.missions.step(0.1, f);
+    }
+    const crate = world.missions.state.crate.group.position;
+    Object.assign(f, { x: crate.x + 5, y: crate.y + 4, z: crate.z - 8, heading: 0, roll: 0, pitch: -0.02 });
+  }
+  if (name === 'touchdown') {
+    Object.assign(f, { x: 310, y: groundHeight(310, -1300) + CONFIG.collisionHeight, z: -1300, heading: 0, roll: 0, pitch: -0.08, speed: 32, throttle: 0.25 });
+    setFlaps(f, 30);
+    world.touchdown = evaluateTouchdown(f, groundHeight(f.x, f.z));
+    f.onGround = true;
+    world.status = 'complete';
+    world.score = 2200;
+    world.time = 83;
+    world.fuel = 46;
+    if (typeof document !== 'undefined') {
+      const canvas = document.querySelector('#view');
+      canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mousemove', { movementX: 100 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    }
+  }
+  world.rings.forEach((ring, i) => {
+    ring.visible = contract === 0 && i >= world.progress;
+  });
 }
-// Shot staging needs no unused flight controller; gameplay uses player input.
